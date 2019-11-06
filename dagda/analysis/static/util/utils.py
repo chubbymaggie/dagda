@@ -23,6 +23,8 @@ import shutil
 import tempfile
 from tarfile import TarFile
 from tarfile import ReadError
+from api.internal.internal_server import InternalServer
+from log.dagda_logger import DagdaLogger
 
 
 # Prepare filesystem bundle
@@ -30,13 +32,14 @@ def extract_filesystem_bundle(docker_driver, container_id=None, image_name=None)
     temporary_dir = tempfile.mkdtemp()
     # Get and save filesystem bundle
     if container_id is not None:
-        data = docker_driver.get_docker_client().export(container=container_id).data
+        image = docker_driver.get_docker_client().export(container=container_id)
         name = container_id
     else:
-        data = docker_driver.get_docker_client().get_image(image=image_name).data
+        image = docker_driver.get_docker_client().get_image(image=image_name)
         name = image_name.replace('/', '_').replace(':', '_')
     with open(temporary_dir + "/" + name + ".tar", "wb") as file:
-        file.write(data)
+        for chunk in image:
+            file.write(chunk)
     # Untar filesystem bundle
     tarfile = TarFile(temporary_dir + "/" + name + ".tar")
     tarfile.extractall(temporary_dir)
@@ -77,8 +80,15 @@ def _untar_layers(dir, layers):
     for member_name in output:
         try:
             tarfile.extract(output[member_name], path=dir, set_attrs=False)
-        except (ValueError, ReadError):
-            pass
+        except (ValueError, ReadError) as ex:
+            if InternalServer.is_debug_logging_enabled():
+                message = "Unexpected exception of type {0} occurred while untaring the docker image: {1!r}" \
+                    .format(type(ex).__name__, ex.get_message() if type(ex).__name__ == 'DagdaError' else ex.args)
+                DagdaLogger.get_logger().debug(message)
+        except PermissionError as ex:
+            message = "Unexpected error occurred while untaring the docker image: " + \
+                      "Operation not permitted on {0!r}".format(member_name)
+            DagdaLogger.get_logger().warn(message)
 
     # Clean up
     for layer in layers:

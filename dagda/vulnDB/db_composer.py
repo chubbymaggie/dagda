@@ -19,6 +19,8 @@
 
 import io
 from datetime import date
+from threading import Thread
+from log.dagda_logger import DagdaLogger
 from api.internal.internal_server import InternalServer
 from vulnDB.ext_source_util import get_bug_traqs_lists_from_file
 from vulnDB.ext_source_util import get_bug_traqs_lists_from_online_mode
@@ -47,29 +49,33 @@ class DBComposer:
 
     # Compose vuln DB
     def compose_vuln_db(self):
+        if InternalServer.is_debug_logging_enabled():
+            DagdaLogger.get_logger().debug('ENTRY to the method for composing VulnDB')
+
         # -- CVE
         # Adding or updating CVEs
-        first_year = self.mongoDbDriver.remove_only_cve_for_update()
-        for i in range(first_year, next_year):
-            compressed_content = get_http_resource_content(
-                "https://static.nvd.nist.gov/feeds/xml/cve/nvdcve-2.0-" + str(i) + ".xml.gz")
-            cve_list = get_cve_list_from_file(compressed_content, i)
-            if len(cve_list) > 0:
-                self.mongoDbDriver.bulk_insert_cves(cve_list)
+        if InternalServer.is_debug_logging_enabled():
+            DagdaLogger.get_logger().debug('Updating CVE collection ...')
 
-            # Add CVE info collection with additional info like score
-            compressed_content_info = get_http_resource_content("https://nvd.nist.gov/download/nvdcve-"
-                                                                + str(i) + ".xml.zip")
-            cve_info_list = get_cve_description_from_file(compressed_content_info)
-            compressed_ext_content_info = \
-                get_http_resource_content("https://static.nvd.nist.gov/feeds/xml/cve/nvdcve-2.0-"
-                                                                    + str(i) + ".xml.zip")
-            cve_ext_info_list = get_cve_cweid_from_file(compressed_ext_content_info, cve_info_list)
-            if len(cve_ext_info_list) > 0:
-                self.mongoDbDriver.bulk_insert_cves_info(cve_ext_info_list)
+        first_year = self.mongoDbDriver.remove_only_cve_for_update()
+        threads = list()
+        for i in range(first_year, next_year):
+            tmp_thread = Thread(target=DBComposer._threaded_cve_gathering, args=(self.mongoDbDriver, i))
+            threads.append(tmp_thread)
+            tmp_thread.start()
+
+        # Waiting for the threads
+        for i in threads:
+            i.join()
+
+        if InternalServer.is_debug_logging_enabled():
+            DagdaLogger.get_logger().debug('CVE collection updated')
 
         # -- Exploit DB
         # Adding or updating Exploit_db and Exploit_db info
+        if InternalServer.is_debug_logging_enabled():
+            DagdaLogger.get_logger().debug('Updating Exploit DB collection ...')
+
         self.mongoDbDriver.delete_exploit_db_collection()
         self.mongoDbDriver.delete_exploit_db_info_collection()
         csv_content = get_http_resource_content(
@@ -78,25 +84,37 @@ class DBComposer:
         self.mongoDbDriver.bulk_insert_exploit_db_ids(exploit_db_list)
         self.mongoDbDriver.bulk_insert_exploit_db_info(exploit_db_info_list)
 
+        if InternalServer.is_debug_logging_enabled():
+            DagdaLogger.get_logger().debug('Exploit DB collection updated')
+
+        # -- RHSA (Red Hat Security Advisory) and RHBA (Red Hat Bug Advisory)
+        # Adding or updating rhsa and rhba collections
+        if InternalServer.is_debug_logging_enabled():
+            DagdaLogger.get_logger().debug('Updating RHSA & RHBA collections ...')
+
+        self.mongoDbDriver.delete_rhba_collection()
+        self.mongoDbDriver.delete_rhba_info_collection()
+        self.mongoDbDriver.delete_rhsa_collection()
+        self.mongoDbDriver.delete_rhsa_info_collection()
+        bz2_file = get_http_resource_content('https://www.redhat.com/security/data/oval/rhsa.tar.bz2')
+        rhsa_list, rhba_list, rhsa_info_list, rhba_info_list = get_rhsa_and_rhba_lists_from_file(bz2_file)
+        self.mongoDbDriver.bulk_insert_rhsa(rhsa_list)
+        self.mongoDbDriver.bulk_insert_rhba(rhba_list)
+        self.mongoDbDriver.bulk_insert_rhsa_info(rhsa_info_list)
+        self.mongoDbDriver.bulk_insert_rhba_info(rhba_info_list)
+
+        if InternalServer.is_debug_logging_enabled():
+            DagdaLogger.get_logger().debug('RHSA & RHBA collections updated')
+
         # -- BID
         # Adding BugTraqs from 20180328_sf_db.json.gz, where 103525 is the max bid in the gz file
+        if InternalServer.is_debug_logging_enabled():
+            DagdaLogger.get_logger().debug('Updating BugTraqs Id collection ...')
+
         max_bid = self.mongoDbDriver.get_max_bid_inserted()
+        bid_thread = Thread(target=DBComposer._threaded_preprocessed_bid_gathering, args=(self.mongoDbDriver, max_bid))
         if max_bid < 103525:
-            # Clean
-            if max_bid != 0:
-                self.mongoDbDriver.delete_bid_collection()
-                self.mongoDbDriver.delete_bid_info_collection()
-            # Adding BIDs
-            compressed_file = io.BytesIO(get_http_resource_content(
-                "https://github.com/eliasgranderubio/bidDB_downloader/raw/master/bonus_track/20180328_sf_db.json.gz"))
-            bid_items_array, bid_detail_array = get_bug_traqs_lists_from_file(compressed_file)
-            # Insert BIDs
-            for bid_items_list in bid_items_array:
-                self.mongoDbDriver.bulk_insert_bids(bid_items_list)
-                bid_items_list.clear()
-            # Insert BID details
-            self.mongoDbDriver.bulk_insert_bid_info(bid_detail_array)
-            bid_detail_array.clear()
+            bid_thread.start()
             # Set the new max bid
             max_bid = 103525
 
@@ -113,15 +131,54 @@ class DBComposer:
             self.mongoDbDriver.bulk_insert_bid_info(bid_detail_array)
             bid_detail_array.clear()
 
-        # -- RHSA (Red Hat Security Advisory) and RHBA (Red Hat Bug Advisory)
-        # Adding or updating rhsa and rhba collections
-        self.mongoDbDriver.delete_rhba_collection()
-        self.mongoDbDriver.delete_rhba_info_collection()
-        self.mongoDbDriver.delete_rhsa_collection()
-        self.mongoDbDriver.delete_rhsa_info_collection()
-        bz2_file = get_http_resource_content('https://www.redhat.com/security/data/oval/rhsa.tar.bz2')
-        rhsa_list, rhba_list, rhsa_info_list, rhba_info_list = get_rhsa_and_rhba_lists_from_file(bz2_file)
-        self.mongoDbDriver.bulk_insert_rhsa(rhsa_list)
-        self.mongoDbDriver.bulk_insert_rhba(rhba_list)
-        self.mongoDbDriver.bulk_insert_rhsa_info(rhsa_info_list)
-        self.mongoDbDriver.bulk_insert_rhba_info(rhba_info_list)
+        # Wait for bid_thread
+        if bid_thread.is_alive():
+            bid_thread.join()
+
+        if InternalServer.is_debug_logging_enabled():
+            DagdaLogger.get_logger().debug('BugTraqs Id collection updated')
+
+        if InternalServer.is_debug_logging_enabled():
+            DagdaLogger.get_logger().debug('EXIT from the method for composing VulnDB')
+
+    # Get CVEs thread
+    @staticmethod
+    def _threaded_cve_gathering(mongoDbDriver, i):
+        if InternalServer.is_debug_logging_enabled():
+            DagdaLogger.get_logger().debug('... Including CVEs - ' + str(i))
+
+        compressed_content = get_http_resource_content(
+            "https://static.nvd.nist.gov/feeds/xml/cve/nvdcve-2.0-" + str(i) + ".xml.gz")
+        cve_list = get_cve_list_from_file(compressed_content, i)
+        if len(cve_list) > 0:
+            mongoDbDriver.bulk_insert_cves(cve_list)
+
+        # Add CVE info collection with additional info like score
+        compressed_content_info = get_http_resource_content("https://nvd.nist.gov/download/nvdcve-"
+                                                            + str(i) + ".xml.zip")
+        cve_info_list = get_cve_description_from_file(compressed_content_info)
+        compressed_ext_content_info = \
+            get_http_resource_content("https://static.nvd.nist.gov/feeds/xml/cve/nvdcve-2.0-"
+                                      + str(i) + ".xml.zip")
+        cve_ext_info_list = get_cve_cweid_from_file(compressed_ext_content_info, cve_info_list)
+        if len(cve_ext_info_list) > 0:
+            mongoDbDriver.bulk_insert_cves_info(cve_ext_info_list)
+
+    # Get preprocessed BIDs thread
+    @staticmethod
+    def _threaded_preprocessed_bid_gathering(mongoDbDriver, max_bid):
+        # Clean
+        if max_bid != 0:
+            mongoDbDriver.delete_bid_collection()
+            mongoDbDriver.delete_bid_info_collection()
+        # Adding BIDs
+        compressed_file = io.BytesIO(get_http_resource_content(
+            "https://github.com/eliasgranderubio/bidDB_downloader/raw/master/bonus_track/20180328_sf_db.json.gz"))
+        bid_items_array, bid_detail_array = get_bug_traqs_lists_from_file(compressed_file)
+        # Insert BIDs
+        for bid_items_list in bid_items_array:
+            mongoDbDriver.bulk_insert_bids(bid_items_list)
+            bid_items_list.clear()
+        # Insert BID details
+        mongoDbDriver.bulk_insert_bid_info(bid_detail_array)
+        bid_detail_array.clear()

@@ -36,7 +36,7 @@ class DockerDriver:
             # those used by the Docker command-line client.
             self.cli = docker.from_env(version="auto", timeout=3600).api
         except DockerException:
-            DagdaLogger.get_logger().error('Error while fetching Docker server API version: Assumming Travis CI tests.')
+            DagdaLogger.get_logger().error('Error while fetching Docker server API version: Assuming Travis CI tests.')
             self.cli = None
 
     # Gets the docker image name from a running container
@@ -51,7 +51,7 @@ class DockerDriver:
             containers = self.cli.containers()
             for c in containers:
                 if c['Image'] == image_name:
-                    ids = c['Id']
+                    ids.append(c['Id'])
         except NotFound:
             # Nothing to do
             pass
@@ -78,7 +78,7 @@ class DockerDriver:
                 DagdaLogger.get_logger().error(message)
                 raise DagdaError(message)
             else:
-                message = "Unexpected exception of type {0} occured: {1!r}" \
+                message = "Unexpected exception of type {0} occurred: {1!r}" \
                     .format(type(ex).__name__, str(ex))
                 DagdaLogger.get_logger().error(message)
                 raise ex

@@ -1,10 +1,11 @@
 # Dagda
 [![Build Status](https://travis-ci.org/eliasgranderubio/dagda.svg?branch=master)](https://travis-ci.org/eliasgranderubio/dagda)
 [![Coverage Status](https://coveralls.io/repos/github/eliasgranderubio/dagda/badge.svg?branch=master)](https://coveralls.io/github/eliasgranderubio/dagda?branch=master)
-[![Python](https://img.shields.io/badge/python-3.3%2C%203.4%2C%203.5%2C%203.6-blue.svg)](https://github.com/eliasgranderubio/dagda)
+[![Python](https://img.shields.io/badge/python-3.4%2C%203.5%2C%203.6-blue.svg)](https://github.com/eliasgranderubio/dagda)
 [![Docker Pulls](https://img.shields.io/docker/pulls/3grander/dagda.svg)](https://hub.docker.com/r/3grander/dagda/)
 [![License](https://img.shields.io/badge/license-Apache%202-blue.svg)](https://github.com/eliasgranderubio/dagda)
 [![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2Feliasgranderubio%2Fdagda.svg?type=shield)](https://app.fossa.io/projects/git%2Bgithub.com%2Feliasgranderubio%2Fdagda?ref=badge_shield)
+[![Donate](https://img.shields.io/badge/Donate-PayPal-green.svg)](https://paypal.me/eliasgranderubio)
 
 **Dagda** is a tool to perform static analysis of known vulnerabilities, trojans, viruses, malware & other malicious threats in docker images/containers and to monitor the docker daemon and running docker containers for detecting anomalous activities.
 
@@ -42,16 +43,18 @@ Finally, each analysis report of a docker image/container, included all static a
        * [Monitoring running containers for detecting anomalous activities](#monitoring-running-containers-for-detecting-anomalous-activities)
      * [Getting docker daemon events](#getting-docker-daemon-events)
      * [Bonus Track: Quick Start with Docker](#bonus-track-quick-start-with-docker)
+   * [Internal workflows](#internal-workflows)
    * [Troubleshooting](#troubleshooting)
    * [Change Log](#change-log)
    * [Bugs and Feedback](#bugs-and-feedback)
    * [License](#license)
+   * [Donation](#donation)
 
 ## Requirements
 Before **Dagda** usage, you must have installed the next requirements:
 
-* Python 3.3.X or later
-* MongoDB 2.4 or later
+* Python 3.4.X or later
+* MongoDB 2.6 or later
 * Docker
 * Pip3
   * PyMongo
@@ -63,6 +66,7 @@ Before **Dagda** usage, you must have installed the next requirements:
   * Flask-cors
   * PyYAML
   * Defusedxml
+  * Waitress
 
 The requirements can be installed with pip:
 ```bash
@@ -845,9 +849,15 @@ Execute the following commands in the root folder of **Dagda** and then, the **D
     docker-compose up -d
 ```
 
+## Internal workflows
+
+Below, a 10,000 foot diagram about the **Dagda** internal workflows is shown:
+
+![Dagda_internal_workflows](https://raw.githubusercontent.com/eliasgranderubio/dagda/master/img/Dagda_internal_workflows.png)
+
 ## Troubleshooting
 
-Typically, Dagda works fine, but some scenarios can cause problems. If you get some issue, check the [Troubleshooting](https://github.com/eliasgranderubio/dagda/wiki/Troubleshooting) page for fixing it.
+Typically, **Dagda** works fine, but some scenarios can cause problems. If you get some issue, check the [Troubleshooting](https://github.com/eliasgranderubio/dagda/wiki/Troubleshooting) page for fixing it.
 
 ## Change Log
 
@@ -859,3 +869,10 @@ For bugs, questions and discussions please use the [Github Issues](https://githu
 
 ## License
 [![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2Feliasgranderubio%2Fdagda.svg?type=large)](https://app.fossa.io/projects/git%2Bgithub.com%2Feliasgranderubio%2Fdagda?ref=badge_large)
+
+
+## Donation
+
+If this project help you in your security analysis or into your CI/CD pipelines, you can invite me a cup of coffee :)
+
+[![paypal](https://www.paypalobjects.com/en_US/i/btn/btn_donateCC_LG.gif)](https://paypal.me/eliasgranderubio)
